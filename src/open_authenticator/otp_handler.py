@@ -388,3 +388,23 @@ class OTPHandler:
         except Exception as e:
             logger.error(f"Error resetting OTP: {e}")
             return False
+
+    def get_otp_info(self, email: str) -> Optional[Dict[str, Any]]:
+        """Retrieve OTP information for the given email if available."""
+        email_hash = self._hash_email(email)
+        base_key = f"otp:{email_hash}"
+        prefixed_key = self._add_prefix(base_key)
+
+        try:
+            otp_data = None
+            if self.redis_client:
+                redis_data = self.redis_client.hgetall(prefixed_key)
+                if redis_data:
+                    otp_data = {k: v for k, v in redis_data.items()}
+            else:
+                otp_data = self.otp_store.get(email_hash)
+
+            return otp_data
+        except Exception as e:
+            logger.error(f"Error retrieving OTP info: {e}")
+            return None

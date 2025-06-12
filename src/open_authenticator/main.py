@@ -34,6 +34,13 @@ class OTPVerificationResponse(BaseModel):
     status: str
     message: str
 
+class OTPInfoResponse(BaseModel):
+    email: EmailStr
+    otp: str
+    created: str
+    expiry: str
+    verified: str
+
 @app.post("/api/otp/generate", response_model=OTPGenerationResponse)
 async def generate_otp(request: OTPGenerationRequest):
     otp, created_time, is_new = otp_handler.generate_otp(request.email, request.operation, request.force_new)
@@ -74,6 +81,20 @@ async def verify_otp(request: OTPVerificationRequest):
     if success:
         return {"status": "success", "message": message}
     return JSONResponse(content={"status": "error", "message": message}, status_code=400)
+
+
+@app.get("/api/otp/list/{email}", response_model=OTPInfoResponse)
+async def list_otp(email: EmailStr):
+    info = otp_handler.get_otp_info(email)
+    if info:
+        return {
+            "email": info.get("email"),
+            "otp": info.get("otp"),
+            "created": info.get("created"),
+            "expiry": info.get("expiry"),
+            "verified": info.get("verified"),
+        }
+    return JSONResponse(content={"message": "No OTP found"}, status_code=404)
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
