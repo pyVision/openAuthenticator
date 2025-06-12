@@ -1,14 +1,15 @@
 [tool.poetry]
-name = "open-authenticator"
+name = "openauthenticator"
 version = "0.1.0"
-description = "Simple OTP based authentication"
-authors = ["Your Name <you@example.com>"]
+description = ""
+authors = ["Codex <codex@openai.com>"]
 packages = [{include = "open_authenticator", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
-fastapi = "^0.110"
-uvicorn = "^0.29"
+python = "^3.12"
+fastapi = "^0.115"
+uvicorn = "^0.34"
+pyotp = "^2.9"
 redis = "^5.0"
 python-multipart = "^0.0.9"
 jinja2 = "^3.1"
@@ -16,5 +17,5 @@ dotenv = "^0.9.9"
 pydantic = {extras = ["email"], version = "^2.11.5"}
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
