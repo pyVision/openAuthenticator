@@ -79,6 +79,19 @@
             height: 30px;
             border-radius: 50%;
             background-color: #006699;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .time-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.85);
+            transform-origin: bottom;
+            transition: transform 1s linear;
         }
         
         .login-form {
@@ -267,7 +280,35 @@
                 </div>
             </div>
         </div>
-        
+
+        <!-- Add TOTP Modal -->
+        <div id="addTotpModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">Add New TOTP Account</div>
+                <div class="form-group">
+                    <label for="totpLabelInput">Label:</label>
+                    <input type="text" id="totpLabelInput" placeholder="Account label">
+                </div>
+                <div class="form-group">
+                    <label for="totpLoginIdInput">Login ID:</label>
+                    <input type="text" id="totpLoginIdInput" placeholder="Login ID">
+                </div>
+                <div class="form-group">
+                    <label for="totpSecretInput">Secret:</label>
+                    <input type="text" id="totpSecretInput" placeholder="Secret">
+                </div>
+                <div class="form-group">
+                    <label for="totpIssuerInput">Issuer (optional):</label>
+                    <input type="text" id="totpIssuerInput" placeholder="Issuer">
+                </div>
+                <div id="totpAddMessage" class="status-message hidden"></div>
+                <button class="btn" onclick="addTotp()">Add</button>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="hideAddTotpModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Authenticator Screen -->
         <div id="authenticatorScreen" class="hidden">
             <div class="header">
@@ -282,9 +323,10 @@
             <div id="appInfo" style="text-align: center; padding: 10px 0;">
                 <h2>Open Authenticator</h2>
                 <p id="userEmailDisplay"></p>
-                <div class="search" style="max-width: 80%; margin: 15px auto 5px;">
-                    <input type="text" placeholder="Search..." id="searchInput">
-                </div>
+                    <div class="search" style="max-width: 80%; margin: 15px auto 5px; display: flex; align-items: center;">
+                        <div class="icon" onclick="showAddTotpModal()" style="font-size: 24px; cursor: pointer; margin-right: 10px;">+</div>
+                        <input type="text" placeholder="Search..." id="searchInput">
+                    </div>
             </div>
             <div class="content" id="accountsList">
                 <!-- Account items will be dynamically added here -->
@@ -403,7 +445,7 @@
             const email = sessionStorage.getItem('email');
             if (!email) return;
             
-            fetch(`/api/otp/list/${encodeURIComponent(email)}`)
+            fetch(`/api/users/${encodeURIComponent(email)}/totp`)
                 .then(r => r.json())
                 .then(data => {
                     displayAccounts(data);
@@ -414,49 +456,27 @@
         }
         
         // Display accounts in the authenticator interface
-        function displayAccounts(data) {
+        function displayAccounts(accounts) {
             const accountsList = document.getElementById('accountsList');
             accountsList.innerHTML = '';
-            
-            // Create a function to generate random 6-digit codes for demo purposes
-            function getRandomCode() {
-                return Math.floor(100000 + Math.random() * 900000).toString();
-            }
-            
-            // Display the currently logged in account
-            const accountItem = document.createElement('div');
-            accountItem.className = 'account-item';
-            accountItem.innerHTML = `
-                <div class="account-info">
-                    <div class="account-name">Google: ${currentEmail}</div>
-                </div>
-                <div class="otp-code">${getRandomCode()}</div>
-                <div class="time-indicator"></div>
-            `;
-            accountsList.appendChild(accountItem);
-            
-            // Add demo accounts similar to the image
-            const demoAccounts = [
-                { name: 'Google: hikingfan@gmail.com', code: '992 785' },
-                { name: 'Google: elisa.g.beckett@gmail.com', code: '321 495' },
-                { name: 'Google: surfingfan@gmail.com', code: '495 984' }
-            ];
-            
-            demoAccounts.forEach(account => {
-                if (!account.name.includes(currentEmail)) {
-                    const demoItem = document.createElement('div');
-                    demoItem.className = 'account-item';
-                    demoItem.innerHTML = `
-                        <div class="account-info">
-                            <div class="account-name">${account.name}</div>
-                        </div>
-                        <div class="otp-code">${account.code}</div>
-                        <div class="time-indicator"></div>
-                    `;
-                    accountsList.appendChild(demoItem);
-                }
+
+            accounts.forEach(account => {
+                const item = document.createElement('div');
+                item.className = 'account-item';
+                const label = account.issuer ? `${account.issuer}: ${account.label}` : account.label;
+                item.innerHTML = `
+                    <div class="account-info">
+                        <div class="account-name">${label} (${account.login_id})</div>
+                    </div>
+                    <div class="otp-code" id="code-${account.label}">--</div>
+                    <div class="time-indicator">
+                        <div class="time-progress"></div>
+                    </div>
+                `;
+                accountsList.appendChild(item);
+                updateCode(account.label);
             });
-            
+
             // Add search functionality
             document.getElementById('searchInput').addEventListener('input', function(e) {
                 const searchText = e.target.value.toLowerCase();
@@ -470,6 +490,120 @@
                 });
             });
         }
+
+        function updateCode(label) {
+            const email = sessionStorage.getItem('email');
+            fetch(`/api/users/${encodeURIComponent(email)}/totp/${encodeURIComponent(label)}/code`)
+                .then(r => {
+                    if (!r.ok) {
+                        return r.json().then(errorData => {
+                            throw new Error(errorData.detail || 'Failed to fetch TOTP code');
+                        });
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    // Update the code display
+                    document.getElementById(`code-${label}`).textContent = data.code;
+                    
+                    // Store the code expiration time and period in data attributes for timer usage
+                    const codeElement = document.getElementById(`code-${label}`);
+                    const now = new Date().getTime();
+                    const expiresAt = now + (data.remaining_seconds * 1000);
+                    codeElement.setAttribute('data-expires', expiresAt);
+                    codeElement.setAttribute('data-period', data.period || 30);
+                    
+                    // Set up the timer display based on initial data
+                    setupTimerDisplay(label, data.remaining_seconds, data.period || 30);
+                })
+                .catch(err => {
+                    console.error('Error fetching code for', label, err);
+                    // Display error in place of the code
+                    const codeElement = document.getElementById(`code-${label}`);
+                    if (codeElement) {
+                        codeElement.textContent = 'Error';
+                        codeElement.style.color = '#e74c3c';
+                        codeElement.setAttribute('title', err.message);
+                    }
+                });
+        }
+        
+        // Store timers to clear them when needed
+        const codeTimers = {};
+        const timerIntervals = {};
+        
+        // Set up the timer display and start countdown
+        function setupTimerDisplay(label, initialSeconds, period = 30) {
+            const codeElement = document.getElementById(`code-${label}`);
+            const timeIndicator = codeElement.nextElementSibling;
+            
+            // Get or create the progress element
+            let progressElement = timeIndicator.querySelector('.time-progress');
+            if (!progressElement) {
+                progressElement = document.createElement('div');
+                progressElement.className = 'time-progress';
+                timeIndicator.appendChild(progressElement);
+            }
+            
+            // Set initial progress
+            const initialProgress = initialSeconds / period;
+            progressElement.style.transform = `scaleY(${1 - initialProgress})`;
+            
+            // Clear any existing timer
+            if (timerIntervals[label]) {
+                clearInterval(timerIntervals[label]);
+            }
+            
+            // Start a timer to update only the display every second
+            timerIntervals[label] = setInterval(() => {
+                updateTimerDisplay(label);
+            }, 1000);
+            
+            // Set a timeout to refresh the code when it expires
+            if (codeTimers[label]) {
+                clearTimeout(codeTimers[label]);
+            }
+            codeTimers[label] = setTimeout(() => {
+                updateCode(label);
+            }, initialSeconds * 1000);
+        }
+        
+        // Update only the timer display without fetching new TOTP
+        function updateTimerDisplay(label) {
+            const codeElement = document.getElementById(`code-${label}`);
+            if (!codeElement) {
+                if (timerIntervals[label]) clearInterval(timerIntervals[label]);
+                return;
+            }
+            
+            const expiresAt = parseInt(codeElement.getAttribute('data-expires') || '0');
+            const period = parseInt(codeElement.getAttribute('data-period') || '30');
+            const now = new Date().getTime();
+            const remaining = Math.max(0, (expiresAt - now) / 1000);
+            
+            // Calculate progress (0 to 1, where 0 is expired and 1 is full time)
+            const progress = remaining / period;
+            
+            // Update the progress display
+            const timeIndicator = codeElement.nextElementSibling;
+            const progressElement = timeIndicator.querySelector('.time-progress');
+            if (progressElement) {
+                progressElement.style.transform = `scaleY(${1 - progress})`;
+            }
+        }
+
+        // Initial interval to periodically refresh all accounts
+        setInterval(function() {
+            const email = sessionStorage.getItem('email');
+            if (!email) return;
+            
+            fetch(`/api/users/${encodeURIComponent(email)}/totp`)
+                .then(r => r.json())
+                .then(accounts => {
+                    accounts.forEach(acc => updateCode(acc.label));
+                })
+                .catch(err => console.error('Error refreshing accounts:', err));
+        }, 30000);
         
         // Show status message
         function showMessage(elementId, message, type) {
@@ -479,6 +613,52 @@
             element.classList.add('status-' + type);
         }
         
+        function showAddTotpModal() {
+            document.getElementById('addTotpModal').classList.remove('hidden');
+        }
+
+        function hideAddTotpModal() {
+            document.getElementById('addTotpModal').classList.add('hidden');
+            document.getElementById('totpLabelInput').value = '';
+            document.getElementById('totpLoginIdInput').value = '';
+            document.getElementById('totpSecretInput').value = '';
+            document.getElementById('totpIssuerInput').value = '';
+            document.getElementById('totpAddMessage').classList.add('hidden');
+        }
+
+        function addTotp() {
+            const label = document.getElementById('totpLabelInput').value.trim();
+            const loginId = document.getElementById('totpLoginIdInput').value.trim();
+            const secret = document.getElementById('totpSecretInput').value.trim();
+            const issuer = document.getElementById('totpIssuerInput').value.trim();
+            if (!label || !loginId || !secret) {
+                showMessage('totpAddMessage', 'Label, Login ID, and Secret are required', 'error');
+                return;
+            }
+            const payload = { label, login_id: loginId, secret };
+            if (issuer) payload.issuer = issuer;
+
+            const email = sessionStorage.getItem('email');
+            fetch(`/api/users/${encodeURIComponent(email)}/totp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(res => {
+                if (res.ok) {
+                    showMessage('totpAddMessage', res.data.message, 'success');
+                    hideAddTotpModal();
+                    loadAccounts();
+                } else {
+                    showMessage('totpAddMessage', res.data.detail || 'Error adding TOTP', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('totpAddMessage', error.toString(), 'error');
+            });
+        }
+
         // Toggle dropdown menu
         function toggleDropdown() {
             document.getElementById("headerDropdown").classList.toggle("show");

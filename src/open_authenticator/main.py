@@ -7,8 +7,10 @@ from pathlib import Path
 
 from .otp_handler import OTPHandler
 from .init_application import initialization_result
+from .api import app as totp_app
 
 app = FastAPI()
+app.mount("/api", totp_app)
 
 otp_handler = OTPHandler()
 
