@@ -258,6 +258,195 @@ class KdbxManager:
         self.logger.info("Database closed")
         return True
 
+    def get_database_metadata(self) -> Dict:
+        """
+        Get metadata about the current database.
+        
+        Returns:
+            Dictionary with database metadata
+            
+        Raises:
+            KdbxError: If no database is open
+        """
+        if self.kdbx is None:
+            raise KdbxError("No database is open")
+            
+        try:
+            # Get header information
+            header = self.kdbx.kdbx.header
+            
+            # Determine KDBX version
+            try:
+                # Try direct attribute access first
+                version = f"{header.major_version}.{header.minor_version}"
+            except AttributeError:
+                # Fall back to dictionary-style access or hardcoded defaults
+                major = getattr(header, 'major_version', 4)  # Default to version 4
+                minor = getattr(header, 'minor_version', 0)  # Default to version 0
+                version = f"{major}.{minor}"
+            
+            # Get KDF information
+            kdf_params = getattr(header, 'kdf_parameters', {})
+            kdf_type = "Unknown"
+            kdf_info = {}
+            
+            if b'$UUID' in kdf_params:
+                kdf_uuid = kdf_params[b'$UUID']
+                
+                # Argon2 UUID: 14AAF7C6-BC0A-4D98-B93F-036A395CF6B1
+                argon2_uuid = bytes([
+                    0x14, 0xAA, 0xF7, 0xC6, 0xBC, 0x0A, 0x4D, 0x98,
+                    0xB9, 0x3F, 0x03, 0x6A, 0x39, 0x5C, 0xF6, 0xB1
+                ])
+                
+                # AES UUID: C9D9F39A-628A-4460-BF74-0D08C18A4FEA
+                aes_uuid = bytes([
+                    0xC9, 0xD9, 0xF3, 0x9A, 0x62, 0x8A, 0x44, 0x60,
+                    0xBF, 0x74, 0x0D, 0x08, 0xC1, 0x8A, 0x4F, 0xEA
+                ])
+                
+                if kdf_uuid == argon2_uuid:
+                    kdf_type = "Argon2"
+                    if b'i' in kdf_params:
+                        kdf_info["iterations"] = kdf_params[b'i']
+                    if b'm' in kdf_params:
+                        kdf_info["memory"] = f"{kdf_params[b'm'] / (1024*1024):.2f} MB"
+                    if b'p' in kdf_params:
+                        kdf_info["parallelism"] = kdf_params[b'p']
+                elif kdf_uuid == aes_uuid:
+                    kdf_type = "AES-KDF"
+                    if b'r' in kdf_params:
+                        kdf_info["rounds"] = kdf_params[b'r']
+            
+            # Get cipher information
+            cipher_type = "Unknown"
+            cipher_uuid = getattr(header, 'cipher_id', None)
+
+            # AES UUID: 31C1F2E6-BF71-4350-BE58-05216AFC5AFF
+            aes_uuid = bytes([
+                0x31, 0xC1, 0xF2, 0xE6, 0xBF, 0x71, 0x43, 0x50,
+                0xBE, 0x58, 0x05, 0x21, 0x6A, 0xFC, 0x5A, 0xFF
+            ])
+            
+            if cipher_uuid == aes_uuid:
+                cipher_type = "AES-256"
+                
+            # Count entries and groups
+            entry_count = len(self.kdbx.entries)
+            group_count = len(self.kdbx.groups)
+            
+            # Get database name and description
+            db_name = self.kdbx.filename
+            db_desc = ""
+            
+            if hasattr(self.kdbx, 'database_description'):
+                db_desc = self.kdbx.database_description
+                
+            # Count attachments
+            attachment_count = 0
+            attachment_size = 0
+            for entry in self.kdbx.entries:
+                if hasattr(entry, 'attachments') and entry.attachments:
+                    attachment_count += len(entry.attachments)
+                    attachment_size += sum(len(data) for data in entry.attachments.values())
+                    
+            # Get file size
+            file_size = os.path.getsize(self.filepath) if os.path.exists(self.filepath) else 0
+            
+            # Build metadata dictionary
+            metadata = {
+                "file_path": self.filepath,
+                "file_size": f"{file_size / 1024:.2f} KB",
+                "database_name": db_name,
+                "database_description": db_desc,
+                "kdbx_version": version,
+                "cipher": cipher_type,
+                "kdf": {
+                    "type": kdf_type,
+                    **kdf_info
+                },
+                "statistics": {
+                    "entries": entry_count,
+                    "groups": group_count,
+                    "attachments": {
+                        "count": attachment_count,
+                        "size": f"{attachment_size / 1024:.2f} KB" if attachment_size > 0 else "0 KB"
+                    }
+                },
+                "keyfile_used": self.keyfile_path is not None
+            }
+            
+            return metadata
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.logger.error(f"Failed to get database metadata: {str(e)}")
+            raise KdbxError(f"Failed to get database metadata: {str(e)}")#
+
+    def change_credentials(
+        self,
+        new_password: str = None,
+        new_keyfile: str = None,
+        current_password: str = None,
+        current_keyfile: str = None
+    ) -> bool:
+        """
+        Change the credentials (password and/or keyfile) for the database.
+        
+        Args:
+            new_password: New password (None to keep current)
+            new_keyfile: Path to new keyfile (None to keep current)
+            current_password: Current password (required if database was opened with password)
+            current_keyfile: Path to current keyfile (required if database was opened with keyfile)
+            
+        Returns:
+            True if credentials changed successfully
+            
+        Raises:
+            KdbxAuthError: If current credentials are invalid
+            KdbxError: If credentials change fails
+        """
+        if self.kdbx is None:
+            raise KdbxError("No database is open")
+            
+        try:
+            # Verify current credentials
+            filepath = self.filepath
+            temp_kdbx = None
+            
+            try:
+                temp_kdbx = PyKeePass(
+                    filepath,
+                    password=current_password,
+                    keyfile=current_keyfile
+                )
+            except CredentialsError:
+                raise KdbxAuthError("Current credentials are invalid")
+                
+            # Determine new credentials
+            password = new_password if new_password is not None else current_password
+            keyfile = new_keyfile if new_keyfile is not None else current_keyfile
+            
+            # Change credentials
+            self.kdbx.password = password
+            self.kdbx.keyfile = keyfile
+            
+            # Save with new credentials
+            self.save()
+            
+            # Update instance variables if needed
+            if new_keyfile is not None:
+                self.keyfile_path = new_keyfile
+                
+            self.logger.info("Changed database credentials")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to change credentials: {str(e)}")
+            raise KdbxError(f"Failed to change credentials: {str(e)}")
+
+   
     def add_group(self, name: str, parent_group: Union[str, Group] = None) -> Group:
         """
         Add a new group to the database.
@@ -1033,67 +1222,6 @@ class KdbxManager:
             self.logger.error(f"Failed to configure AES-KDF: {str(e)}")
             return False
 
-    def change_credentials(
-        self,
-        new_password: str = None,
-        new_keyfile: str = None,
-        current_password: str = None,
-        current_keyfile: str = None
-    ) -> bool:
-        """
-        Change the credentials (password and/or keyfile) for the database.
-        
-        Args:
-            new_password: New password (None to keep current)
-            new_keyfile: Path to new keyfile (None to keep current)
-            current_password: Current password (required if database was opened with password)
-            current_keyfile: Path to current keyfile (required if database was opened with keyfile)
-            
-        Returns:
-            True if credentials changed successfully
-            
-        Raises:
-            KdbxAuthError: If current credentials are invalid
-            KdbxError: If credentials change fails
-        """
-        if self.kdbx is None:
-            raise KdbxError("No database is open")
-            
-        try:
-            # Verify current credentials
-            filepath = self.filepath
-            temp_kdbx = None
-            
-            try:
-                temp_kdbx = PyKeePass(
-                    filepath,
-                    password=current_password,
-                    keyfile=current_keyfile
-                )
-            except CredentialsError:
-                raise KdbxAuthError("Current credentials are invalid")
-                
-            # Determine new credentials
-            password = new_password if new_password is not None else current_password
-            keyfile = new_keyfile if new_keyfile is not None else current_keyfile
-            
-            # Change credentials
-            self.kdbx.password = password
-            self.kdbx.keyfile = keyfile
-            
-            # Save with new credentials
-            self.save()
-            
-            # Update instance variables if needed
-            if new_keyfile is not None:
-                self.keyfile_path = new_keyfile
-                
-            self.logger.info("Changed database credentials")
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Failed to change credentials: {str(e)}")
-            raise KdbxError(f"Failed to change credentials: {str(e)}")
 
     def add_custom_field(self, entry: Entry, key: str, value: str, protect: bool = False) -> bool:
         """
@@ -1124,128 +1252,3 @@ class KdbxManager:
             self.logger.error(f"Failed to add custom field: {str(e)}")
             raise KdbxError(f"Failed to add custom field: {str(e)}")
 
-    def get_database_metadata(self) -> Dict:
-        """
-        Get metadata about the current database.
-        
-        Returns:
-            Dictionary with database metadata
-            
-        Raises:
-            KdbxError: If no database is open
-        """
-        if self.kdbx is None:
-            raise KdbxError("No database is open")
-            
-        try:
-            # Get header information
-            header = self.kdbx.kdbx.header
-            
-            # Determine KDBX version
-            try:
-                # Try direct attribute access first
-                version = f"{header.major_version}.{header.minor_version}"
-            except AttributeError:
-                # Fall back to dictionary-style access or hardcoded defaults
-                major = getattr(header, 'major_version', 4)  # Default to version 4
-                minor = getattr(header, 'minor_version', 0)  # Default to version 0
-                version = f"{major}.{minor}"
-            
-            # Get KDF information
-            kdf_params = getattr(header, 'kdf_parameters', {})
-            kdf_type = "Unknown"
-            kdf_info = {}
-            
-            if b'$UUID' in kdf_params:
-                kdf_uuid = kdf_params[b'$UUID']
-                
-                # Argon2 UUID: 14AAF7C6-BC0A-4D98-B93F-036A395CF6B1
-                argon2_uuid = bytes([
-                    0x14, 0xAA, 0xF7, 0xC6, 0xBC, 0x0A, 0x4D, 0x98,
-                    0xB9, 0x3F, 0x03, 0x6A, 0x39, 0x5C, 0xF6, 0xB1
-                ])
-                
-                # AES UUID: C9D9F39A-628A-4460-BF74-0D08C18A4FEA
-                aes_uuid = bytes([
-                    0xC9, 0xD9, 0xF3, 0x9A, 0x62, 0x8A, 0x44, 0x60,
-                    0xBF, 0x74, 0x0D, 0x08, 0xC1, 0x8A, 0x4F, 0xEA
-                ])
-                
-                if kdf_uuid == argon2_uuid:
-                    kdf_type = "Argon2"
-                    if b'i' in kdf_params:
-                        kdf_info["iterations"] = kdf_params[b'i']
-                    if b'm' in kdf_params:
-                        kdf_info["memory"] = f"{kdf_params[b'm'] / (1024*1024):.2f} MB"
-                    if b'p' in kdf_params:
-                        kdf_info["parallelism"] = kdf_params[b'p']
-                elif kdf_uuid == aes_uuid:
-                    kdf_type = "AES-KDF"
-                    if b'r' in kdf_params:
-                        kdf_info["rounds"] = kdf_params[b'r']
-            
-            # Get cipher information
-            cipher_type = "Unknown"
-            cipher_uuid = getattr(header, 'cipher_id', None)
-
-            # AES UUID: 31C1F2E6-BF71-4350-BE58-05216AFC5AFF
-            aes_uuid = bytes([
-                0x31, 0xC1, 0xF2, 0xE6, 0xBF, 0x71, 0x43, 0x50,
-                0xBE, 0x58, 0x05, 0x21, 0x6A, 0xFC, 0x5A, 0xFF
-            ])
-            
-            if cipher_uuid == aes_uuid:
-                cipher_type = "AES-256"
-                
-            # Count entries and groups
-            entry_count = len(self.kdbx.entries)
-            group_count = len(self.kdbx.groups)
-            
-            # Get database name and description
-            db_name = self.kdbx.filename
-            db_desc = ""
-            
-            if hasattr(self.kdbx, 'database_description'):
-                db_desc = self.kdbx.database_description
-                
-            # Count attachments
-            attachment_count = 0
-            attachment_size = 0
-            for entry in self.kdbx.entries:
-                if hasattr(entry, 'attachments') and entry.attachments:
-                    attachment_count += len(entry.attachments)
-                    attachment_size += sum(len(data) for data in entry.attachments.values())
-                    
-            # Get file size
-            file_size = os.path.getsize(self.filepath) if os.path.exists(self.filepath) else 0
-            
-            # Build metadata dictionary
-            metadata = {
-                "file_path": self.filepath,
-                "file_size": f"{file_size / 1024:.2f} KB",
-                "database_name": db_name,
-                "database_description": db_desc,
-                "kdbx_version": version,
-                "cipher": cipher_type,
-                "kdf": {
-                    "type": kdf_type,
-                    **kdf_info
-                },
-                "statistics": {
-                    "entries": entry_count,
-                    "groups": group_count,
-                    "attachments": {
-                        "count": attachment_count,
-                        "size": f"{attachment_size / 1024:.2f} KB" if attachment_size > 0 else "0 KB"
-                    }
-                },
-                "keyfile_used": self.keyfile_path is not None
-            }
-            
-            return metadata
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            self.logger.error(f"Failed to get database metadata: {str(e)}")
-            raise KdbxError(f"Failed to get database metadata: {str(e)}")#
