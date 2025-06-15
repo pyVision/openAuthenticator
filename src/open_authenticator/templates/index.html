@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Open Authenticator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background-color: #f0f4f8;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .header .icon {
+            margin-right: 15px;
+        }
+        
+        .header .search {
+            flex-grow: 1;
+            position: relative;
+        }
+        
+        .header input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+            background-color: #f0f4f8;
+        }
+        
+        .content {
+            padding: 0;
+        }
+        
+        .account-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding: 20px 15px;
+        }
+        
+        .account-info {
+            flex-grow: 1;
+        }
+        
+        .account-name {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .otp-code {
+            font-size: 32px;
+            color: #006699;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .time-indicator {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #006699;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .time-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.85);
+            transform-origin: bottom;
+            transition: transform 1s linear;
+        }
+        
+        .login-form {
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .btn {
+            background-color: #006699;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+        }
+        
+        .btn:hover {
+            background-color: #004466;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 400px;
+        }
+        
+        .modal-header {
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .status-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background-color: #f0f4f8;
+        }
+        
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .modal-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        /* Dropdown Menu Styles */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            left: 0; /* Changed from right:0 to left:0 */
+            top: 30px; /* Added to position below the icon */
+            background-color: white;
+            min-width: 120px; /* Adjusted width */
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 100; /* Increased z-index */
+            border-radius: 4px;
+        }
+        
+        .dropdown-content a {
+            color: #333; /* Darker text for better visibility */
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            font-size: 16px; /* Increased font size */
+            font-weight: 500; /* Made slightly bolder */
+        }
+        
+        .dropdown-content a:hover {
+            background-color: #f1f1f1;
+        }
+        
+        .show {
+            display: block;
+        }
+        
+        .btn-link {
+            background: none;
+            border: none;
+            color: #006699;
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 8px 12px;
+            font-size: 0.9em;
+        }
+        
+        .btn-link:hover {
+            color: #004466;
+        }
+        
+        .btn-secondary {
+            background-color: #f2f2f2;
+            color: #333;
+            padding: 8px 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: normal;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Login Screen -->
+        <div id="loginScreen">
+            <div class="header">
+                <h2>Open Authenticator</h2>
+            </div>
+            <div class="login-form">
+                <div class="form-group">
+                    <label for="emailInput">Email:</label>
+                    <input type="email" id="emailInput" placeholder="Enter your email">
+                </div>
+                <button class="btn" onclick="handleLogin()">Login</button>
+            </div>
+            <div id="loginMessage" class="status-message hidden"></div>
+        </div>
+        
+        <!-- OTP Verification Modal -->
+        <div id="otpModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">Enter Verification Code</div>
+                <div class="form-group">
+                    <input type="text" id="otpInput" placeholder="Enter OTP code">
+                </div>
+                <div id="otpMessage" class="status-message hidden"></div>
+                <button class="btn" onclick="verifyOTP()">Verify</button>
+                <div class="modal-footer">
+                    <button class="btn-link" onclick="resendOTP()">Resend Code</button>
+                    <button class="btn-secondary" onclick="hideOTPModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add TOTP Modal -->
+        <div id="addTotpModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">Add New TOTP Account</div>
+                <div class="form-group">
+                    <label for="totpLabelInput">Label:</label>
+                    <input type="text" id="totpLabelInput" placeholder="Account label">
+                </div>
+                <div class="form-group">
+                    <label for="totpLoginIdInput">Login ID:</label>
+                    <input type="text" id="totpLoginIdInput" placeholder="Login ID">
+                </div>
+                <div class="form-group">
+                    <label for="totpSecretInput">Secret:</label>
+                    <input type="text" id="totpSecretInput" placeholder="Secret">
+                </div>
+                <div class="form-group">
+                    <label for="totpIssuerInput">Issuer (optional):</label>
+                    <input type="text" id="totpIssuerInput" placeholder="Issuer">
+                </div>
+                <div id="totpAddMessage" class="status-message hidden"></div>
+                <button class="btn" onclick="addTotp()">Add</button>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="hideAddTotpModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Authenticator Screen -->
+        <div id="authenticatorScreen" class="hidden">
+            <div class="header">
+                <div class="dropdown">
+                    <div onclick="toggleDropdown()" class="icon" style="font-size: 24px; cursor: pointer;">≡</div>
+                    <div id="headerDropdown" class="dropdown-content">
+                        <a href="#" onclick="logout(); return false;">Logout</a>
+                    </div>
+                </div>
+                <div class="icon" id="userIcon" style="margin-left: auto;">N</div>
+            </div>
+            <div id="appInfo" style="text-align: center; padding: 10px 0;">
+                <h2>Open Authenticator</h2>
+                <p id="userEmailDisplay"></p>
+                    <div class="search" style="max-width: 80%; margin: 15px auto 5px; display: flex; align-items: center;">
+                        <div class="icon" onclick="showAddTotpModal()" style="font-size: 24px; cursor: pointer; margin-right: 10px;">+</div>
+                        <input type="text" placeholder="Search..." id="searchInput">
+                    </div>
+            </div>
+            <div class="content" id="accountsList">
+                <!-- Account items will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentEmail = '';
+        
+        // Handle login process
+        function handleLogin() {
+            const email = document.getElementById('emailInput').value.trim();
+            if (!email) {
+                showMessage('loginMessage', 'Please enter your email address', 'error');
+                return;
+            }
+            
+            currentEmail = email;
+            generateOTP();
+        }
+        
+        // Generate OTP for login
+        function generateOTP(forceNew = false) {
+            fetch('/api/otp/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    email: currentEmail, 
+                    operation: 'login',
+                    force_new: forceNew
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success' || data.status === 'info') {
+                    showOTPModal();
+                    showMessage('otpMessage', data.message, 'success');
+                } else {
+                    showMessage('loginMessage', data.message || 'Error generating OTP', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('loginMessage', 'Network error. Please try again.', 'error');
+            });
+        }
+        
+        // Resend OTP code
+        function resendOTP() {
+            generateOTP(true); // Force new OTP generation
+            showMessage('otpMessage', 'New verification code sent.', 'success');
+        }
+        
+        // Show OTP verification modal
+        function showOTPModal() {
+            document.getElementById('otpModal').classList.remove('hidden');
+        }
+        
+        // Hide OTP verification modal
+        function hideOTPModal() {
+            document.getElementById('otpModal').classList.add('hidden');
+            document.getElementById('otpInput').value = '';
+            document.getElementById('otpMessage').classList.add('hidden');
+        }
+        
+        // Verify OTP submission
+        function verifyOTP() {
+            const otp = document.getElementById('otpInput').value.trim();
+            if (!otp) {
+                showMessage('otpMessage', 'Please enter the verification code', 'error');
+                return;
+            }
+            
+            fetch('/api/otp/verify', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    email: currentEmail, 
+                    otp: otp 
+                })
+            })
+            .then(r => r.json().then(d => ({status: r.status, body: d})))
+            .then(res => {
+                if (res.status === 200 && res.body.status === 'success') {
+                    sessionStorage.setItem('email', currentEmail);
+                    sessionStorage.setItem('otp', otp);
+                    hideOTPModal();
+                    showAuthenticator();
+                } else {
+                    showMessage('otpMessage', res.body.message, 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('otpMessage', 'Network error. Please try again.', 'error');
+            });
+        }
+        
+        // Show authenticator screen and populate with accounts
+        function showAuthenticator() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('authenticatorScreen').classList.remove('hidden');
+            
+            console.log('Showing authenticator for email:', currentEmail);
+            // Set the user icon with first letter of email
+            if (currentEmail) {
+                const firstLetter = currentEmail.charAt(0).toUpperCase();
+                document.getElementById('userIcon').textContent = firstLetter;
+                document.getElementById('userEmailDisplay').textContent = currentEmail;
+            }
+            
+            loadAccounts();
+        }
+        
+        // Load and display TOTP accounts
+        function loadAccounts() {
+            const email = sessionStorage.getItem('email');
+            if (!email) return;
+            
+            fetch(`/api/users/${encodeURIComponent(email)}/totp`)
+                .then(r => r.json())
+                .then(data => {
+                    displayAccounts(data);
+                })
+                .catch(error => {
+                    console.error('Error loading accounts:', error);
+                });
+        }
+        
+        // Display accounts in the authenticator interface
+        function displayAccounts(accounts) {
+            const accountsList = document.getElementById('accountsList');
+            accountsList.innerHTML = '';
+
+            accounts.forEach(account => {
+                const item = document.createElement('div');
+                item.className = 'account-item';
+                const label = account.issuer ? `${account.issuer}: ${account.label}` : account.label;
+                item.innerHTML = `
+                    <div class="account-info">
+                        <div class="account-name">${label} (${account.login_id})</div>
+                    </div>
+                    <div class="otp-code" id="code-${account.label}">--</div>
+                    <div class="time-indicator">
+                        <div class="time-progress"></div>
+                    </div>
+                `;
+                accountsList.appendChild(item);
+                updateCode(account.label);
+            });
+
+            // Add search functionality
+            document.getElementById('searchInput').addEventListener('input', function(e) {
+                const searchText = e.target.value.toLowerCase();
+                document.querySelectorAll('.account-item').forEach(item => {
+                    const accountName = item.querySelector('.account-name').textContent.toLowerCase();
+                    if (accountName.includes(searchText)) {
+                        item.style.display = 'flex';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        function updateCode(label) {
+            const email = sessionStorage.getItem('email');
+            fetch(`/api/users/${encodeURIComponent(email)}/totp/${encodeURIComponent(label)}/code`)
+                .then(r => {
+                    if (!r.ok) {
+                        return r.json().then(errorData => {
+                            throw new Error(errorData.detail || 'Failed to fetch TOTP code');
+                        });
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    // Update the code display
+                    document.getElementById(`code-${label}`).textContent = data.code;
+                    
+                    // Store the code expiration time and period in data attributes for timer usage
+                    const codeElement = document.getElementById(`code-${label}`);
+                    const now = new Date().getTime();
+                    const expiresAt = now + (data.remaining_seconds * 1000);
+                    codeElement.setAttribute('data-expires', expiresAt);
+                    codeElement.setAttribute('data-period', data.period || 30);
+                    
+                    // Set up the timer display based on initial data
+                    setupTimerDisplay(label, data.remaining_seconds, data.period || 30);
+                })
+                .catch(err => {
+                    console.error('Error fetching code for', label, err);
+                    // Display error in place of the code
+                    const codeElement = document.getElementById(`code-${label}`);
+                    if (codeElement) {
+                        codeElement.textContent = 'Error';
+                        codeElement.style.color = '#e74c3c';
+                        codeElement.setAttribute('title', err.message);
+                    }
+                });
+        }
+        
+        // Store timers to clear them when needed
+        const codeTimers = {};
+        const timerIntervals = {};
+        
+        // Set up the timer display and start countdown
+        function setupTimerDisplay(label, initialSeconds, period = 30) {
+            const codeElement = document.getElementById(`code-${label}`);
+            const timeIndicator = codeElement.nextElementSibling;
+            
+            // Get or create the progress element
+            let progressElement = timeIndicator.querySelector('.time-progress');
+            if (!progressElement) {
+                progressElement = document.createElement('div');
+                progressElement.className = 'time-progress';
+                timeIndicator.appendChild(progressElement);
+            }
+            
+            // Set initial progress
+            const initialProgress = initialSeconds / period;
+            progressElement.style.transform = `scaleY(${1 - initialProgress})`;
+            
+            // Clear any existing timer
+            if (timerIntervals[label]) {
+                clearInterval(timerIntervals[label]);
+            }
+            
+            // Start a timer to update only the display every second
+            timerIntervals[label] = setInterval(() => {
+                updateTimerDisplay(label);
+            }, 1000);
+            
+            // Set a timeout to refresh the code when it expires
+            if (codeTimers[label]) {
+                clearTimeout(codeTimers[label]);
+            }
+            codeTimers[label] = setTimeout(() => {
+                updateCode(label);
+            }, initialSeconds * 1000);
+        }
+        
+        // Update only the timer display without fetching new TOTP
+        function updateTimerDisplay(label) {
+            const codeElement = document.getElementById(`code-${label}`);
+            if (!codeElement) {
+                if (timerIntervals[label]) clearInterval(timerIntervals[label]);
+                return;
+            }
+            
+            const expiresAt = parseInt(codeElement.getAttribute('data-expires') || '0');
+            const period = parseInt(codeElement.getAttribute('data-period') || '30');
+            const now = new Date().getTime();
+            const remaining = Math.max(0, (expiresAt - now) / 1000);
+            
+            // Calculate progress (0 to 1, where 0 is expired and 1 is full time)
+            const progress = remaining / period;
+            
+            // Update the progress display
+            const timeIndicator = codeElement.nextElementSibling;
+            const progressElement = timeIndicator.querySelector('.time-progress');
+            if (progressElement) {
+                progressElement.style.transform = `scaleY(${1 - progress})`;
+            }
+        }
+
+        // Initial interval to periodically refresh all accounts
+        setInterval(function() {
+            const email = sessionStorage.getItem('email');
+            if (!email) return;
+            
+            fetch(`/api/users/${encodeURIComponent(email)}/totp`)
+                .then(r => r.json())
+                .then(accounts => {
+                    accounts.forEach(acc => updateCode(acc.label));
+                })
+                .catch(err => console.error('Error refreshing accounts:', err));
+        }, 30000);
+        
+        // Show status message
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.classList.remove('hidden', 'status-success', 'status-error');
+            element.classList.add('status-' + type);
+        }
+        
+        function showAddTotpModal() {
+            document.getElementById('addTotpModal').classList.remove('hidden');
+        }
+
+        function hideAddTotpModal() {
+            document.getElementById('addTotpModal').classList.add('hidden');
+            document.getElementById('totpLabelInput').value = '';
+            document.getElementById('totpLoginIdInput').value = '';
+            document.getElementById('totpSecretInput').value = '';
+            document.getElementById('totpIssuerInput').value = '';
+            document.getElementById('totpAddMessage').classList.add('hidden');
+        }
+
+        function addTotp() {
+            const label = document.getElementById('totpLabelInput').value.trim();
+            const loginId = document.getElementById('totpLoginIdInput').value.trim();
+            const secret = document.getElementById('totpSecretInput').value.trim();
+            const issuer = document.getElementById('totpIssuerInput').value.trim();
+            if (!label || !loginId || !secret) {
+                showMessage('totpAddMessage', 'Label, Login ID, and Secret are required', 'error');
+                return;
+            }
+            const payload = { label, login_id: loginId, secret };
+            if (issuer) payload.issuer = issuer;
+
+            const email = sessionStorage.getItem('email');
+            fetch(`/api/users/${encodeURIComponent(email)}/totp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json().then(data => ({ ok: r.ok, data })))
+            .then(res => {
+                if (res.ok) {
+                    showMessage('totpAddMessage', res.data.message, 'success');
+                    hideAddTotpModal();
+                    loadAccounts();
+                } else {
+                    showMessage('totpAddMessage', res.data.detail || 'Error adding TOTP', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('totpAddMessage', error.toString(), 'error');
+            });
+        }
+
+        // Toggle dropdown menu
+        function toggleDropdown() {
+            document.getElementById("headerDropdown").classList.toggle("show");
+            console.log("Dropdown toggled");  // Debug message
+        }
+        
+        // Close dropdown if user clicks outside of it
+        document.addEventListener('click', function(event) {
+            // If the click is not on the dropdown toggle icon or inside dropdown content
+            if (!event.target.matches('.icon') && !event.target.closest('.dropdown-content')) {
+                const dropdowns = document.getElementsByClassName("dropdown-content");
+                for (let i = 0; i < dropdowns.length; i++) {
+                    const openDropdown = dropdowns[i];
+                    if (openDropdown.classList.contains('show')) {
+                        openDropdown.classList.remove('show');
+                    }
+                }
+            }
+        });
+        
+        // Logout function
+        function logout() {
+            // Clear session storage
+            sessionStorage.clear();
+            
+            // Reset email and input fields
+            currentEmail = '';
+            document.getElementById('emailInput').value = '';
+            document.getElementById('otpInput').value = '';
+            
+            // Hide authenticator screen and show login screen
+            document.getElementById('authenticatorScreen').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            
+            // Reset any messages
+            document.getElementById('loginMessage').classList.add('hidden');
+        }
+        
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            const email = sessionStorage.getItem('email');
+            if (email) {
+                currentEmail = email;
+                showAuthenticator();
+            }
+        });
+    </script>
+</body>
+</html>
